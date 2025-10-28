@@ -103,7 +103,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
     
     if (!error) {
-      navigate('/dashboard');
+      navigate('/home');
     }
     
     return { error };

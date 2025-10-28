@@ -1,5 +1,6 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigate } from "react-router-dom";
+import { Header } from "@/components/Header";
 import SuperAdminDashboard from "./SuperAdminDashboard";
 import AdminDashboard from "./AdminDashboard";
 import DoctorDashboard from "./DoctorDashboard";
@@ -13,8 +14,11 @@ const Dashboard = () => {
   // Show loading state
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
       </div>
     );
   }
@@ -27,10 +31,13 @@ const Dashboard = () => {
   // Show message if no role assigned
   if (!userRole) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center p-8">
-          <h2 className="text-2xl font-bold mb-2">No Role Assigned</h2>
-          <p className="text-muted-foreground">Please contact your administrator to assign a role to your account.</p>
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
+          <div className="text-center p-8">
+            <h2 className="text-2xl font-bold mb-2">No Role Assigned</h2>
+            <p className="text-muted-foreground">Please contact your administrator to assign a role to your account.</p>
+          </div>
         </div>
       </div>
     );

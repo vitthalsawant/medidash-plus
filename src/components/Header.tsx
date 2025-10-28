@@ -51,6 +51,12 @@ export const Header = () => {
                 </Badge>
               )}
               
+              {/* Logout Button */}
+              <Button onClick={signOut} variant="outline" className="gap-2">
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Log out</span>
+              </Button>
+              
               {/* User Dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
