@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Activity, Loader2 } from "lucide-react";
 import { z } from "zod";
@@ -31,6 +32,7 @@ const Auth = () => {
     password: "",
     confirmPassword: "",
     fullName: "",
+    role: "patient" as 'super_admin' | 'admin' | 'doctor' | 'patient' | 'nurse' | 'receptionist',
   });
   const [errors, setErrors] = useState<any>({});
   
@@ -87,7 +89,8 @@ const Auth = () => {
       const { error } = await signUp(
         signUpData.email,
         signUpData.password,
-        signUpData.fullName
+        signUpData.fullName,
+        signUpData.role
       );
       
       if (error) {
@@ -218,6 +221,30 @@ const Auth = () => {
                     disabled={isLoading}
                   />
                   {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="signup-role">I am a</Label>
+                  <Select
+                    value={signUpData.role}
+                    onValueChange={(value: any) => setSignUpData({ ...signUpData, role: value })}
+                    disabled={isLoading}
+                  >
+                    <SelectTrigger id="signup-role">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="patient">🧍‍♂️ Patient</SelectItem>
+                      <SelectItem value="doctor">🧑‍⚕️ Doctor</SelectItem>
+                      <SelectItem value="nurse">👩‍⚕️ Nurse</SelectItem>
+                      <SelectItem value="receptionist">🧾 Receptionist</SelectItem>
+                      <SelectItem value="admin">👩‍💻 Admin</SelectItem>
+                      <SelectItem value="super_admin">🧑‍💼 Super Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Select your role to access the appropriate dashboard
+                  </p>
                 </div>
                 
                 <Button type="submit" className="w-full" disabled={isLoading}>
