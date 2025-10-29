@@ -13,7 +13,7 @@ interface AuthContextType {
   userRole: UserRole | null;
   loading: boolean;
   signUp: (email: string, password: string, fullName: string, role?: 'super_admin' | 'admin' | 'doctor' | 'patient' | 'nurse' | 'receptionist') => Promise<{ error: any }>;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signIn: (email: string, password: string, role: 'super_admin' | 'admin' | 'doctor' | 'patient' | 'nurse' | 'receptionist') => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
 
@@ -96,13 +96,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return { error };
   };
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+  const signIn = async (email: string, password: string, role: 'super_admin' | 'admin' | 'doctor' | 'patient' | 'nurse' | 'receptionist') => {
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
     
-    if (!error) {
+    // If authentication succeeded, validate the role
+    if (!error && data.user) {
+      const { data: userRoleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', data.user.id)
+        .maybeSingle();
+      
+      // Check if the provided role matches the user's registered role
+      if (userRoleData && userRoleData.role !== role) {
+        // Role doesn't match, sign out the user
+        await supabase.auth.signOut();
+        
+        return { 
+          error: { 
+            message: `This account is registered as a ${userRoleData.role}, not a ${role}. Please select the correct role.` 
+          } 
+        };
+      }
+      
+      // If user has no role assigned, still allow login but without role
+      // The user will be redirected to home page without access to role-specific dashboards
+      
+      // Role matches, proceed to navigation
       navigate('/home');
     }
     

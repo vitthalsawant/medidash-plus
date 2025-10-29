@@ -14,6 +14,9 @@ import { z } from "zod";
 const signInSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
+  role: z.enum(['super_admin', 'admin', 'doctor', 'patient', 'nurse', 'receptionist'], {
+    errorMap: () => ({ message: "Please select a role" })
+  }),
 });
 
 const signUpSchema = signInSchema.extend({
@@ -26,7 +29,11 @@ const signUpSchema = signInSchema.extend({
 
 const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const [signInData, setSignInData] = useState({ email: "", password: "" });
+  const [signInData, setSignInData] = useState({ 
+    email: "", 
+    password: "",
+    role: "" as 'super_admin' | 'admin' | 'doctor' | 'patient' | 'nurse' | 'receptionist' | '',
+  });
   const [signUpData, setSignUpData] = useState({
     email: "",
     password: "",
@@ -54,7 +61,11 @@ const Auth = () => {
       signInSchema.parse(signInData);
       setIsLoading(true);
       
-      const { error } = await signIn(signInData.email, signInData.password);
+      const { error } = await signIn(
+        signInData.email, 
+        signInData.password,
+        signInData.role as 'super_admin' | 'admin' | 'doctor' | 'patient' | 'nurse' | 'receptionist'
+      );
       
       if (error) {
         toast({
@@ -162,6 +173,31 @@ const Auth = () => {
                     disabled={isLoading}
                   />
                   {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="signin-role">I am a</Label>
+                  <Select
+                    value={signInData.role}
+                    onValueChange={(value: any) => setSignInData({ ...signInData, role: value })}
+                    disabled={isLoading}
+                  >
+                    <SelectTrigger id="signin-role">
+                      <SelectValue placeholder="Select your role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="patient">🧍‍♂️ Patient</SelectItem>
+                      <SelectItem value="doctor">🧑‍⚕️ Doctor</SelectItem>
+                      <SelectItem value="nurse">👩‍⚕️ Nurse</SelectItem>
+                      <SelectItem value="receptionist">🧾 Receptionist</SelectItem>
+                      <SelectItem value="admin">👩‍💻 Admin</SelectItem>
+                      <SelectItem value="super_admin">🧑‍💼 Super Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {errors.role && <p className="text-sm text-destructive">{errors.role}</p>}
+                  <p className="text-xs text-muted-foreground">
+                    Select your registered role to access your dashboard
+                  </p>
                 </div>
                 
                 <Button type="submit" className="w-full" disabled={isLoading}>

@@ -1,9 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -35,7 +33,9 @@ import {
 import { 
   Activity, Calendar, Users, Pill, FileText, LogOut, 
   User, Settings, Plus, Building2, Stethoscope, Heart, 
-  Shield, Clock, TrendingUp, Award, Home as HomeIcon
+  Shield, Clock, TrendingUp, Award, Home as HomeIcon,
+  Eye, ArrowUpRight, ArrowDownRight, DollarSign, Briefcase,
+  ClipboardList, CheckCircle, AlertCircle, Bell
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -46,6 +46,8 @@ const Home = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [doctors, setDoctors] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [insights, setInsights] = useState<any>({});
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const { user, userRole, signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -58,10 +60,208 @@ const Home = () => {
   });
 
   useEffect(() => {
+    fetchInsights();
+    fetchRecentActivity();
     if (isDialogOpen) {
       fetchDoctors();
     }
-  }, [isDialogOpen]);
+  }, [isDialogOpen, userRole]);
+
+  const fetchInsights = async () => {
+    try {
+      if (!userRole || !user) return;
+
+      switch (userRole.role) {
+        case 'patient':
+          const { data: patientData } = await supabase
+            .from('patients')
+            .select('id')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (patientData) {
+            // Get patient's appointments
+            const { data: appointments } = await supabase
+              .from('appointments')
+              .select('status')
+              .eq('patient_id', patientData.id);
+
+            // Get medical records count
+            const { data: records } = await supabase
+              .from('medical_records')
+              .select('id')
+              .eq('patient_id', patientData.id);
+
+            // Get prescriptions count
+            const { data: prescriptions } = await supabase
+              .from('prescriptions')
+              .select('id')
+              .eq('patient_id', patientData.id);
+
+            setInsights({
+              totalAppointments: appointments?.length || 0,
+              upcomingAppointments: appointments?.filter((a: any) => ['scheduled', 'confirmed'].includes(a.status)).length || 0,
+              medicalRecords: records?.length || 0,
+              prescriptions: prescriptions?.length || 0,
+            });
+          }
+          break;
+
+        case 'doctor':
+          const { data: doctorData } = await supabase
+            .from('doctors')
+            .select('id')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (doctorData) {
+            // Get doctor's appointments
+            const { data: appointments } = await supabase
+              .from('appointments')
+              .select('status')
+              .eq('doctor_id', doctorData.id);
+
+            // Get patients count
+            const { data: allAppointments } = await supabase
+              .from('appointments')
+              .select('patient_id')
+              .eq('doctor_id', doctorData.id);
+            
+            const uniquePatients = new Set(allAppointments?.map((a: any) => a.patient_id) || []);
+            const patients = Array.from(uniquePatients).map(id => ({ id }));
+
+            // Get medical records count
+            const { data: records } = await supabase
+              .from('medical_records')
+              .select('id')
+              .eq('doctor_id', doctorData.id);
+
+            setInsights({
+              todayAppointments: appointments?.filter((a: any) => a.status === 'scheduled' || a.status === 'confirmed').length || 0,
+              totalPatients: patients?.length || 0,
+              completedAppointments: appointments?.filter((a: any) => a.status === 'completed').length || 0,
+              medicalRecords: records?.length || 0,
+            });
+          }
+          break;
+
+        case 'receptionist':
+        case 'admin':
+          // Get overall hospital stats
+          const { data: appointments } = await supabase
+            .from('appointments')
+            .select('status');
+
+          const { data: patients } = await supabase
+            .from('patients')
+            .select('id');
+
+          const { data: doctorsList } = await supabase
+            .from('doctors')
+            .select('id');
+
+          setInsights({
+            totalPatients: patients?.length || 0,
+            totalDoctors: doctorsList?.length || 0,
+            totalAppointments: appointments?.length || 0,
+            pendingAppointments: appointments?.filter((a: any) => a.status === 'scheduled').length || 0,
+          });
+          break;
+      }
+    } catch (error) {
+      console.error('Error fetching insights:', error);
+    }
+  };
+
+  const fetchRecentActivity = async () => {
+    try {
+      if (!userRole || !user) {
+        setRecentActivity([]);
+        return;
+      }
+
+      switch (userRole.role) {
+        case 'patient':
+          const { data: patientData } = await supabase
+            .from('patients')
+            .select('id')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (patientData) {
+            const { data: recentAppointments } = await supabase
+              .from('appointments')
+              .select(`
+                id,
+                appointment_date,
+                appointment_time,
+                status,
+                reason,
+                doctors:doctor_id (
+                  full_name
+                )
+              `)
+              .eq('patient_id', patientData.id)
+              .order('appointment_date', { ascending: false })
+              .limit(5);
+
+            setRecentActivity(recentAppointments || []);
+          }
+          break;
+
+        case 'doctor':
+          const { data: doctorData } = await supabase
+            .from('doctors')
+            .select('id')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (doctorData) {
+            const { data: recentAppointments } = await supabase
+              .from('appointments')
+              .select(`
+                id,
+                appointment_date,
+                appointment_time,
+                status,
+                patients:patient_id (
+                  full_name
+                )
+              `)
+              .eq('doctor_id', doctorData.id)
+              .order('appointment_date', { ascending: false })
+              .limit(5);
+
+            setRecentActivity(recentAppointments || []);
+          }
+          break;
+
+        case 'receptionist':
+        case 'admin':
+          const { data: allRecentAppointments } = await supabase
+            .from('appointments')
+            .select(`
+              id,
+              appointment_date,
+              appointment_time,
+              status,
+              patients:patient_id (
+                full_name
+              ),
+              doctors:doctor_id (
+                full_name
+              )
+            `)
+            .order('created_at', { ascending: false })
+            .limit(5);
+
+          setRecentActivity(allRecentAppointments || []);
+          break;
+      }
+    } catch (error) {
+      console.error('Error fetching recent activity:', error);
+    }
+  };
 
   const fetchDoctors = async () => {
     try {
@@ -142,6 +342,9 @@ const Home = () => {
         appointment_time: '',
         reason: ''
       });
+      
+      fetchInsights();
+      fetchRecentActivity();
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -154,7 +357,7 @@ const Home = () => {
   };
 
   const getRoleDisplayName = () => {
-    if (!userRole) return '';
+    if (!userRole) return 'User';
     const roleNames = {
       super_admin: 'Super Admin',
       admin: 'Admin',
@@ -171,6 +374,99 @@ const Home = () => {
     return user.email.substring(0, 2).toUpperCase();
   };
 
+  const getRoleBasedContent = () => {
+    if (!userRole) {
+      return {
+        title: "Welcome to MediDash Plus",
+        description: "Your healthcare management platform",
+        cards: []
+      };
+    }
+
+    switch (userRole.role) {
+      case 'patient':
+        return {
+          title: "Your Health Dashboard",
+          description: "Track your appointments, records, and prescriptions",
+          cards: [
+            { icon: <Calendar className="h-6 w-6" />, title: "Upcoming Appointments", value: insights.upcomingAppointments, color: "bg-blue-500" },
+            { icon: <FileText className="h-6 w-6" />, title: "Medical Records", value: insights.medicalRecords, color: "bg-green-500" },
+            { icon: <Pill className="h-6 w-6" />, title: "Prescriptions", value: insights.prescriptions, color: "bg-purple-500" },
+            { icon: <TrendingUp className="h-6 w-6" />, title: "Total Appointments", value: insights.totalAppointments, color: "bg-orange-500" },
+          ]
+        };
+      
+      case 'doctor':
+        return {
+          title: "Doctor Dashboard",
+          description: "Manage your patients and appointments",
+          cards: [
+            { icon: <Clock className="h-6 w-6" />, title: "Today's Appointments", value: insights.todayAppointments, color: "bg-blue-500" },
+            { icon: <Users className="h-6 w-6" />, title: "Total Patients", value: insights.totalPatients, color: "bg-green-500" },
+            { icon: <CheckCircle className="h-6 w-6" />, title: "Completed", value: insights.completedAppointments, color: "bg-purple-500" },
+            { icon: <FileText className="h-6 w-6" />, title: "Medical Records", value: insights.medicalRecords, color: "bg-orange-500" },
+          ]
+        };
+      
+      case 'nurse':
+        return {
+          title: "Nurse Dashboard",
+          description: "Patient care and medication management",
+          cards: [
+            { icon: <ClipboardList className="h-6 w-6" />, title: "Active Patients", value: insights.totalPatients || 0, color: "bg-blue-500" },
+            { icon: <Pill className="h-6 w-6" />, title: "Medications", value: insights.totalAppointments || 0, color: "bg-green-500" },
+            { icon: <Bell className="h-6 w-6" />, title: "Alerts", value: insights.pendingAppointments || 0, color: "bg-red-500" },
+            { icon: <CheckCircle className="h-6 w-6" />, title: "Completed Tasks", value: insights.completedAppointments || 0, color: "bg-purple-500" },
+          ]
+        };
+      
+      case 'receptionist':
+        return {
+          title: "Reception Dashboard",
+          description: "Appointment scheduling and patient management",
+          cards: [
+            { icon: <Calendar className="h-6 w-6" />, title: "Total Appointments", value: insights.totalAppointments, color: "bg-blue-500" },
+            { icon: <AlertCircle className="h-6 w-6" />, title: "Pending", value: insights.pendingAppointments, color: "bg-orange-500" },
+            { icon: <Users className="h-6 w-6" />, title: "Total Patients", value: insights.totalPatients, color: "bg-green-500" },
+            { icon: <Stethoscope className="h-6 w-6" />, title: "Active Doctors", value: insights.totalDoctors, color: "bg-purple-500" },
+          ]
+        };
+      
+      case 'admin':
+        return {
+          title: "Admin Dashboard",
+          description: "Hospital operations and management",
+          cards: [
+            { icon: <Users className="h-6 w-6" />, title: "Total Patients", value: insights.totalPatients, color: "bg-blue-500" },
+            { icon: <Stethoscope className="h-6 w-6" />, title: "Total Doctors", value: insights.totalDoctors, color: "bg-green-500" },
+            { icon: <Calendar className="h-6 w-6" />, title: "All Appointments", value: insights.totalAppointments, color: "bg-purple-500" },
+            { icon: <Award className="h-6 w-6" />, title: "Performance", value: "High", color: "bg-orange-500" },
+          ]
+        };
+      
+      case 'super_admin':
+        return {
+          title: "Super Admin Dashboard",
+          description: "Complete system oversight and control",
+          cards: [
+            { icon: <Shield className="h-6 w-6" />, title: "System Status", value: "Active", color: "bg-blue-500" },
+            { icon: <Users className="h-6 w-6" />, title: "Total Users", value: insights.totalPatients || 0, color: "bg-green-500" },
+            { icon: <Activity className="h-6 w-6" />, title: "Operations", value: insights.totalAppointments || 0, color: "bg-purple-500" },
+            { icon: <TrendingUp className="h-6 w-6" />, title: "Growth", value: "+25%", color: "bg-orange-500" },
+          ]
+        };
+      
+      default:
+        return {
+          title: "Welcome",
+          description: "Your dashboard",
+          cards: []
+        };
+    }
+  };
+
+  const roleContent = getRoleBasedContent();
+
   return (
     <div className="min-h-screen bg-background">
       {/* Navbar */}
@@ -183,6 +479,7 @@ const Home = () => {
             </div>
             
             <nav className="hidden md:flex items-center gap-6">
+              {userRole?.role === 'patient' && (
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogTrigger asChild>
                   <Button variant="ghost" className="gap-2">
@@ -276,7 +573,8 @@ const Home = () => {
 
                     <div className="space-y-2">
                       <Label>Reason for Visit</Label>
-                      <Textarea
+                        <textarea
+                          className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         placeholder="Describe the reason..."
                         value={appointmentData.reason}
                         onChange={(e) => setAppointmentData({ ...appointmentData, reason: e.target.value })}
@@ -293,6 +591,7 @@ const Home = () => {
                   </div>
                 </DialogContent>
               </Dialog>
+              )}
 
               <Button variant="ghost" onClick={() => navigate('/dashboard')} className="gap-2">
                 <HomeIcon className="h-4 w-4" />
@@ -338,105 +637,361 @@ const Home = () => {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-12">
-        {/* Hero Section */}
-        <div className="text-center mb-16">
-          <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-            Welcome to MediDash Plus
+      <main className="container mx-auto px-4 py-8">
+        {/* Welcome Section */}
+        <div className="mb-8">
+          <h2 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+            {roleContent.title}
           </h2>
-          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-            Your modern healthcare management platform with state-of-the-art infrastructure
+          <p className="text-muted-foreground text-lg">
+            {roleContent.description}
           </p>
         </div>
 
-        {/* New Infrastructure Cards */}
-        <div className="mb-16">
-          <h3 className="text-3xl font-bold mb-8 text-center">New Infrastructure & Facilities</h3>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <InfrastructureCard
-              icon={<Building2 className="h-12 w-12" />}
-              title="New Medical Wing"
-              description="State-of-the-art facilities with advanced medical equipment and modern patient rooms."
-              color="text-blue-600"
-            />
-            <InfrastructureCard
-              icon={<Stethoscope className="h-12 w-12" />}
-              title="Advanced Diagnostics"
-              description="Cutting-edge diagnostic equipment including MRI, CT scans, and laboratory services."
-              color="text-green-600"
-            />
-            <InfrastructureCard
-              icon={<Heart className="h-12 w-12" />}
-              title="Cardiac Care Unit"
-              description="Dedicated cardiac care center with 24/7 monitoring and emergency response."
-              color="text-red-600"
-            />
-            <InfrastructureCard
-              icon={<Shield className="h-12 w-12" />}
-              title="Enhanced Security"
-              description="Modern security systems with digital access control and visitor management."
-              color="text-purple-600"
-            />
-            <InfrastructureCard
-              icon={<Clock className="h-12 w-12" />}
-              title="24/7 Emergency Services"
-              description="Round-the-clock emergency department with immediate response capabilities."
-              color="text-orange-600"
-            />
-            <InfrastructureCard
-              icon={<TrendingUp className="h-12 w-12" />}
-              title="Digital Health Records"
-              description="Completely paperless system with cloud-based patient records management."
-              color="text-cyan-600"
-            />
+        {/* Stats Cards */}
+        {roleContent.cards.length > 0 && (
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {roleContent.cards.map((card: any, index: number) => (
+              <Card key={index} className="hover:shadow-lg transition-shadow">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
+                  <div className={`${card.color} text-white rounded-full h-10 w-10 flex items-center justify-center`}>
+                    {card.icon}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold">{card.value}</div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        </div>
+        )}
+
+        {/* Recent Activity */}
+        {recentActivity.length > 0 && (
+          <div className="mb-8">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Eye className="h-5 w-5" />
+                  Recent Activity
+                </CardTitle>
+                <CardDescription>Your latest appointments and records</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {recentActivity.map((activity: any) => (
+                    <div key={activity.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                      <div className="flex items-center gap-4">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <Calendar className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-medium">
+                            {userRole?.role === 'patient' 
+                              ? `Appointment with Dr. ${activity.doctors?.full_name || 'Unknown'}`
+                              : userRole?.role === 'doctor'
+                              ? `Appointment with ${activity.patients?.full_name || 'Patient'}`
+                              : `Appointment: ${activity.patients?.full_name || 'Patient'} - Dr. ${activity.doctors?.full_name || 'Unknown'}`
+                            }
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {format(new Date(activity.appointment_date), "MMMM d, yyyy")} at {activity.appointment_time}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        activity.status === 'completed' ? 'bg-green-100 text-green-700' :
+                        activity.status === 'confirmed' ? 'bg-blue-100 text-blue-700' :
+                        activity.status === 'scheduled' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {activity.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Quick Actions */}
-        <div className="mb-16">
-          <h3 className="text-3xl font-bold mb-8 text-center">Quick Actions</h3>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
-            <ActionCard
+        {userRole?.role === 'patient' && (
+          <div className="mb-8">
+            <h3 className="text-2xl font-bold mb-4">Quick Actions</h3>
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setIsDialogOpen(true)}>
+                <CardContent className="p-6 text-center">
+                  <div className="bg-blue-500 text-white rounded-full h-16 w-16 flex items-center justify-center mx-auto mb-4">
+                    <Calendar className="h-8 w-8" />
+                  </div>
+                  <h3 className="font-semibold mb-1">Book Appointment</h3>
+                  <p className="text-sm text-muted-foreground">Schedule your next visit</p>
+                </CardContent>
+              </Card>
+              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate('/dashboard')}>
+                <CardContent className="p-6 text-center">
+                  <div className="bg-green-500 text-white rounded-full h-16 w-16 flex items-center justify-center mx-auto mb-4">
+                    <FileText className="h-8 w-8" />
+                  </div>
+                  <h3 className="font-semibold mb-1">View Records</h3>
+                  <p className="text-sm text-muted-foreground">Medical history & documents</p>
+                </CardContent>
+              </Card>
+              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate('/dashboard')}>
+                <CardContent className="p-6 text-center">
+                  <div className="bg-purple-500 text-white rounded-full h-16 w-16 flex items-center justify-center mx-auto mb-4">
+                    <Pill className="h-8 w-8" />
+                  </div>
+                  <h3 className="font-semibold mb-1">Prescriptions</h3>
+                  <p className="text-sm text-muted-foreground">View medications</p>
+                </CardContent>
+              </Card>
+              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setIsDialogOpen(true)}>
+                <CardContent className="p-6 text-center">
+                  <div className="bg-orange-500 text-white rounded-full h-16 w-16 flex items-center justify-center mx-auto mb-4">
+                    <Users className="h-8 w-8" />
+                  </div>
+                  <h3 className="font-semibold mb-1">Find Doctor</h3>
+                  <p className="text-sm text-muted-foreground">Browse specialists</p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {/* About Section */}
+        <div className="mb-12">
+          <h3 className="text-3xl font-bold mb-6 text-center">About MediDash Plus</h3>
+          <Card>
+            <CardContent className="p-8">
+              <p className="text-lg text-muted-foreground text-center max-w-4xl mx-auto leading-relaxed">
+                MediDash Plus is a comprehensive hospital management system designed to streamline healthcare operations 
+                and provide seamless patient care. Our platform integrates modern technology with medical expertise to 
+                deliver efficient, secure, and user-friendly healthcare solutions for hospitals, clinics, and medical facilities.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Hospital Features Section */}
+        <div className="mb-12">
+          <h3 className="text-3xl font-bold mb-8 text-center">Hospital Features & Facilities</h3>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <FeatureCard
+              icon={<Activity className="h-8 w-8" />}
+              title="Electronic Health Records"
+              description="Complete digital transformation of patient records with real-time access and secure storage."
+              color="bg-blue-100"
+            />
+            <FeatureCard
               icon={<Calendar className="h-8 w-8" />}
-              title="Book Appointment"
-              description="Schedule your next visit"
-              onClick={() => setIsDialogOpen(true)}
-              color="bg-blue-500"
+              title="Smart Scheduling System"
+              description="Intelligent appointment booking with automated reminders and calendar integration."
+              color="bg-green-100"
             />
-            <ActionCard
+            <FeatureCard
               icon={<FileText className="h-8 w-8" />}
-              title="My Records"
-              description="View medical history"
-              onClick={() => navigate('/dashboard')}
-              color="bg-green-500"
+              title="Digital Prescriptions"
+              description="Paperless prescription management with e-signature and pharmacy integration."
+              color="bg-purple-100"
             />
-            <ActionCard
-              icon={<Pill className="h-8 w-8" />}
-              title="Prescriptions"
-              description="Manage medications"
-              onClick={() => navigate('/dashboard')}
-              color="bg-purple-500"
-            />
-            <ActionCard
+            <FeatureCard
               icon={<Users className="h-8 w-8" />}
-              title="Find Doctor"
-              description="Browse specialists"
-              onClick={() => setIsDialogOpen(true)}
-              color="bg-orange-500"
+              title="Patient Portal"
+              description="Self-service portal for patients to view records, book appointments, and track health."
+              color="bg-orange-100"
+            />
+            <FeatureCard
+              icon={<TrendingUp className="h-8 w-8" />}
+              title="Analytics & Reports"
+              description="Comprehensive analytics dashboard with insights into hospital performance and trends."
+              color="bg-pink-100"
+            />
+            <FeatureCard
+              icon={<Shield className="h-8 w-8" />}
+              title="Multi-Level Security"
+              description="Advanced security protocols with role-based access control and HIPAA compliance."
+              color="bg-red-100"
+            />
+            <FeatureCard
+              icon={<Heart className="h-8 w-8" />}
+              title="24/7 Emergency Services"
+              description="Round-the-clock emergency department with immediate triage and care protocols."
+              color="bg-yellow-100"
+            />
+            <FeatureCard
+              icon={<Stethoscope className="h-8 w-8" />}
+              title="Specialty Departments"
+              description="Multiple specialty clinics including cardiology, orthopedics, pediatrics, and more."
+              color="bg-cyan-100"
+            />
+            <FeatureCard
+              icon={<Building2 className="h-8 w-8" />}
+              title="State-of-the-Art Facility"
+              description="Modern infrastructure with advanced medical equipment and comfortable patient rooms."
+              color="bg-indigo-100"
+            />
+            <FeatureCard
+              icon={<Pill className="h-8 w-8" />}
+              title="Pharmacy Integration"
+              description="In-house pharmacy with automated medication dispensing and inventory management."
+              color="bg-teal-100"
+            />
+            <FeatureCard
+              icon={<Eye className="h-8 w-8" />}
+              title="Telemedicine Support"
+              description="Virtual consultations and remote monitoring capabilities for enhanced accessibility."
+              color="bg-emerald-100"
+            />
+            <FeatureCard
+              icon={<ClipboardList className="h-8 w-8" />}
+              title="Laboratory Services"
+              description="Fully equipped lab with rapid testing, blood work, and diagnostic imaging."
+              color="bg-rose-100"
             />
           </div>
         </div>
 
-        {/* Statistics */}
-        <div className="grid md:grid-cols-4 gap-6 mb-16">
-          <StatCard number="500+" label="Expert Doctors" />
-          <StatCard number="10K+" label="Happy Patients" />
-          <StatCard number="50+" label="Specialties" />
-          <StatCard number="24/7" label="Emergency Care" />
+        {/* Why Choose Us Section */}
+        <div className="mb-12">
+          <h3 className="text-3xl font-bold mb-8 text-center">Why Choose MediDash Plus</h3>
+          <div className="grid md:grid-cols-2 gap-8">
+            <Card className="border-2 border-primary/20">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Award className="h-6 w-6 text-primary" />
+                  </div>
+                  <CardTitle>Proven Excellence</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Trusted by leading healthcare institutions, MediDash Plus delivers reliable solutions backed by 
+                  years of expertise in healthcare technology and continuous innovation.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-2 border-primary/20">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Clock className="h-6 w-6 text-primary" />
+                  </div>
+                  <CardTitle>Real-Time Access</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Access patient information, schedules, and reports instantly from any device, ensuring 
+                  seamless coordination across all healthcare teams and departments.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-2 border-primary/20">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <User className="h-6 w-6 text-primary" />
+                  </div>
+                  <CardTitle>Patient-Centered</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Empowering patients with tools to actively participate in their healthcare journey through 
+                  easy appointment booking, health record access, and transparent communication.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-2 border-primary/20">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <ArrowUpRight className="h-6 w-6 text-primary" />
+                  </div>
+                  <CardTitle>Scalable Solutions</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Built to grow with your institution, our system adapts to your needs whether you're a small 
+                  clinic or a multi-facility hospital network.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
         </div>
+
+        {/* Statistics Section */}
+        <div className="mb-12">
+          <Card className="bg-gradient-to-r from-primary/10 to-secondary/10">
+            <CardHeader>
+              <CardTitle className="text-center text-2xl">Hospital Statistics</CardTitle>
+              <CardDescription className="text-center">Leading healthcare delivery metrics</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="text-center">
+                  <div className="text-4xl font-bold text-primary mb-2">500+</div>
+                  <div className="text-sm text-muted-foreground">Expert Medical Professionals</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-4xl font-bold text-primary mb-2">50+</div>
+                  <div className="text-sm text-muted-foreground">Medical Specialties</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-4xl font-bold text-primary mb-2">98%</div>
+                  <div className="text-sm text-muted-foreground">Patient Satisfaction Rate</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-4xl font-bold text-primary mb-2">15+</div>
+                  <div className="text-sm text-muted-foreground">Years of Excellence</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Hospital Info */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              Hospital Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-3 gap-6">
+              <div>
+                <Clock className="h-6 w-6 text-primary mb-2" />
+                <h4 className="font-semibold mb-1">Working Hours</h4>
+                <p className="text-sm text-muted-foreground">Monday - Friday: 9:00 AM - 6:00 PM</p>
+                <p className="text-sm text-muted-foreground">Saturday - Sunday: 10:00 AM - 4:00 PM</p>
+              </div>
+              <div>
+                <Heart className="h-6 w-6 text-primary mb-2" />
+                <h4 className="font-semibold mb-1">Emergency</h4>
+                <p className="text-sm text-muted-foreground">Available 24/7</p>
+                <p className="text-sm text-muted-foreground">Call: +1 (555) 123-4567</p>
+              </div>
+              <div>
+                <Shield className="h-6 w-6 text-primary mb-2" />
+                <h4 className="font-semibold mb-1">Security</h4>
+                <p className="text-sm text-muted-foreground">Your data is protected</p>
+                <p className="text-sm text-muted-foreground">HIPAA compliant</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </main>
 
-      <footer className="border-t py-8 bg-card/50 mt-16">
+      <footer className="border-t py-8 bg-card/50 mt-12">
         <div className="container mx-auto px-4 text-center text-muted-foreground">
           <p>&copy; 2025 MediDash Plus. All rights reserved.</p>
         </div>
@@ -445,36 +1000,16 @@ const Home = () => {
   );
 };
 
-const InfrastructureCard = ({ icon, title, description, color }: any) => (
-  <Card className="hover:shadow-lg transition-shadow">
+const FeatureCard = ({ icon, title, description, color }: { icon: React.ReactNode; title: string; description: string; color: string }) => (
+  <Card className="hover:shadow-lg transition-all duration-300 hover:scale-105">
     <CardHeader>
-      <div className={`${color} mb-2`}>{icon}</div>
-      <CardTitle>{title}</CardTitle>
-      <CardDescription>{description}</CardDescription>
+      <div className={`${color} text-primary rounded-lg h-16 w-16 flex items-center justify-center mb-4`}>
+        {icon}
+      </div>
+      <CardTitle className="text-lg">{title}</CardTitle>
+      <CardDescription className="text-sm">{description}</CardDescription>
     </CardHeader>
   </Card>
 );
 
-const ActionCard = ({ icon, title, description, onClick, color }: any) => (
-  <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={onClick}>
-    <CardContent className="p-6 text-center">
-      <div className={`${color} text-white rounded-full h-16 w-16 flex items-center justify-center mx-auto mb-4`}>
-        {icon}
-      </div>
-      <h3 className="font-semibold mb-1">{title}</h3>
-      <p className="text-sm text-muted-foreground">{description}</p>
-    </CardContent>
-  </Card>
-);
-
-const StatCard = ({ number, label }: any) => (
-  <Card>
-    <CardContent className="p-6 text-center">
-      <div className="text-3xl font-bold text-primary mb-2">{number}</div>
-      <div className="text-sm text-muted-foreground">{label}</div>
-    </CardContent>
-  </Card>
-);
-
 export default Home;
-

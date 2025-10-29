@@ -28,19 +28,9 @@ const Dashboard = () => {
     return <Navigate to="/auth" replace />;
   }
 
-  // Show message if no role assigned
+  // If no role assigned, redirect to home
   if (!userRole) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
-          <div className="text-center p-8">
-            <h2 className="text-2xl font-bold mb-2">No Role Assigned</h2>
-            <p className="text-muted-foreground">Please contact your administrator to assign a role to your account.</p>
-          </div>
-        </div>
-      </div>
-    );
+    return <Navigate to="/home" replace />;
   }
 
   // Route to appropriate dashboard based on role
@@ -58,7 +48,7 @@ const Dashboard = () => {
     case 'receptionist':
       return <ReceptionistDashboard />;
     default:
-      return <Navigate to="/auth" replace />;
+      return <Navigate to="/home" replace />;
   }
 };
 
