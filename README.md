@@ -47,6 +47,13 @@ MediDash Plus is a role‑based Hospital Management System built primarily as a 
   - Create prescription with multiple medications; persists `medical_records` and `prescriptions` in Supabase.
 - **Admin / Super Admin / Nurse**:
   - Rich UI cards and actions are scaffolded; most buttons are placeholders pending backend endpoints and data tables.
+  - 
+
+Screenshots of UI 
+<img width="1914" height="969" alt="image" src="https://github.com/user-attachments/assets/3c9f5fc2-68ca-483b-a326-ca5d02cb294f" />
+
+<img width="1919" height="968" alt="image" src="https://github.com/user-attachments/assets/78376655-c09f-469e-ab30-69e899a4f5ef" />
+
 
 ### Known Limitations / Non‑Working or Partial Areas
 
