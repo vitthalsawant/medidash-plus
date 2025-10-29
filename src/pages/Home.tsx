@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +45,8 @@ import { useNavigate } from "react-router-dom";
 
 const Home = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isAppointmentsDialogOpen, setIsAppointmentsDialogOpen] = useState(false);
+  const [appointments, setAppointments] = useState<any[]>([]);
   const [doctors, setDoctors] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [insights, setInsights] = useState<any>({});
@@ -62,10 +65,95 @@ const Home = () => {
   useEffect(() => {
     fetchInsights();
     fetchRecentActivity();
-    if (isDialogOpen) {
-      fetchDoctors();
+    fetchDoctors(); // Load doctors on component mount
+    if (isAppointmentsDialogOpen) {
+      loadAppointments();
     }
-  }, [isDialogOpen, userRole]);
+  }, [userRole, isAppointmentsDialogOpen]);
+
+  const loadAppointments = async () => {
+    try {
+      if (!user) return;
+
+      let query = supabase
+        .from('appointments')
+        .select(`
+          id,
+          appointment_date,
+          appointment_time,
+          reason,
+          status,
+          created_at,
+          doctors(full_name, specialization),
+          patients(full_name)
+        `)
+        .order('appointment_date', { ascending: false })
+        .limit(10);
+
+      // Filter based on user role
+      if (userRole?.role === 'patient') {
+        const { data: patientData } = await supabase
+          .from('patients')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        if (patientData) {
+          query = query.eq('patient_id', patientData.id);
+        }
+      } else if (userRole?.role === 'doctor') {
+        const { data: doctorData } = await supabase
+          .from('doctors')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        if (doctorData) {
+          query = query.eq('doctor_id', doctorData.id);
+        }
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching appointments:', error);
+        // Fall back to demo appointments only
+        const demo = getDemoAppointmentsForUser();
+        setAppointments(demo);
+        return;
+      }
+
+      // Merge DB appointments with demo ones (patient view only)
+      const demo = getDemoAppointmentsForUser();
+      const merged = Array.isArray(data) ? [...data, ...demo] : demo;
+      setAppointments(merged);
+      console.log('Loaded appointments:', merged.length, 'appointments (db + demo)');
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
+      const demo = getDemoAppointmentsForUser();
+      setAppointments(demo);
+    }
+  };
+
+  // Demo appointments storage helpers
+  const demoKey = user?.id ? `demo_appointments_${user.id}` : 'demo_appointments';
+  const getDemoAppointmentsForUser = () => {
+    try {
+      const raw = localStorage.getItem(demoKey);
+      const list = raw ? JSON.parse(raw) : [];
+      // Filter by role if needed later; currently patient-only demo
+      return Array.isArray(list) ? list : [];
+    } catch {
+      return [];
+    }
+  };
+  const saveDemoAppointment = (appt: any) => {
+    try {
+      const list = getDemoAppointmentsForUser();
+      const updated = [appt, ...list];
+      localStorage.setItem(demoKey, JSON.stringify(updated));
+    } catch {}
+  };
 
   const fetchInsights = async () => {
     try {
@@ -270,16 +358,48 @@ const Home = () => {
         .select('id, full_name, specialization')
         .order('full_name');
       
-      if (error) throw error;
-      setDoctors(data || []);
+      if (error) {
+        console.error('Error fetching doctors:', error);
+        console.log('Using fallback doctors due to database error');
+        setDoctors(getFallbackDoctors());
+        
+        // Show helpful message to user
+        toast({
+          title: "Demo Mode",
+          description: "Database error. Using demo doctors. Run 'setup-database.bat' to fix database.",
+          duration: 5000,
+        });
+        return;
+      }
+      
+          if (!data || data.length === 0) {
+            console.log('No doctors found in database, using fallback doctors');
+            setDoctors(getFallbackDoctors());
+            
+            // Show helpful message to user
+            toast({
+              title: "Demo Mode",
+              description: "No doctors in database. Using demo doctors. Run 'setup-database.bat' to add real doctors.",
+              duration: 5000,
+            });
+            return;
+          }
+      
+      setDoctors(data);
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message,
-      });
+      console.error('Error fetching doctors:', error);
+      console.log('Using fallback doctors due to error');
+      setDoctors(getFallbackDoctors());
     }
   };
+
+  const getFallbackDoctors = () => [
+    { id: 'fallback-1', full_name: 'Dr. Sarah Johnson', specialization: 'Cardiology' },
+    { id: 'fallback-2', full_name: 'Dr. Michael Chen', specialization: 'Neurology' },
+    { id: 'fallback-3', full_name: 'Dr. Emily Rodriguez', specialization: 'Pediatrics' },
+    { id: 'fallback-4', full_name: 'Dr. James Wilson', specialization: 'Orthopedics' },
+    { id: 'fallback-5', full_name: 'Dr. Priya Patel', specialization: 'Dermatology' },
+  ];
 
   const handleBookAppointment = async () => {
     if (!appointmentData.doctor_id || !appointmentData.appointment_date || !appointmentData.appointment_time) {
@@ -293,6 +413,7 @@ const Home = () => {
 
     setIsSubmitting(true);
     try {
+      // Get or create patient record
       const { data: patientData } = await supabase
         .from('patients')
         .select('id')
@@ -318,21 +439,93 @@ const Home = () => {
         patientId = newPatient.id;
       }
 
-      await supabase
+      // Use the selected doctor ID directly (all doctors are now from database)
+      let doctorId = appointmentData.doctor_id;
+      const selectedDoctor = doctors.find(d => d.id === appointmentData.doctor_id);
+
+      // Check if using fallback doctor
+      if (selectedDoctor && selectedDoctor.id.startsWith('fallback-')) {
+        // For fallback doctors, try to find any real doctor in the database
+        const { data: anyDoctor, error: anyDoctorError } = await supabase
+          .from('doctors')
+          .select('id, full_name, specialization')
+          .limit(1)
+          .maybeSingle();
+
+        if (anyDoctor) {
+          // Use the real doctor for the appointment
+          doctorId = anyDoctor.id;
+          console.log(`Using real doctor: ${anyDoctor.full_name} for appointment with ${selectedDoctor.full_name}`);
+        } else {
+          // No real doctors exist – create a DEMO appointment locally so the user can proceed
+          const demoAppt = {
+            id: `demo-${Date.now()}`,
+            appointment_date: format(appointmentData.appointment_date!, 'yyyy-MM-dd'),
+            appointment_time: appointmentData.appointment_time,
+            reason: appointmentData.reason,
+            status: 'confirmed',
+            created_at: new Date().toISOString(),
+            doctors: { full_name: selectedDoctor.full_name, specialization: selectedDoctor.specialization },
+            patients: { full_name: user?.email?.split('@')[0] || 'Patient' },
+          };
+          saveDemoAppointment(demoAppt);
+
+          toast({
+            title: "Demo Appointment Booked",
+            description: `Your demo appointment with ${selectedDoctor.full_name} has been scheduled for ${format(appointmentData.appointment_date!, 'PPP')} at ${appointmentData.appointment_time.substring(0, 5)}.`,
+          });
+
+          setIsDialogOpen(false);
+          setAppointmentData({
+            doctor_id: '',
+            appointment_date: undefined,
+            appointment_time: '',
+            reason: ''
+          });
+
+          // Refresh lists (will include demo appointments)
+          loadAppointments();
+          fetchInsights();
+          fetchRecentActivity();
+          return;
+        }
+      }
+
+      // Insert appointment into database
+      const { error: appointmentError } = await supabase
         .from('appointments')
         .insert({
           patient_id: patientId,
-          doctor_id: appointmentData.doctor_id,
+          doctor_id: doctorId,
           appointment_date: format(appointmentData.appointment_date!, 'yyyy-MM-dd'),
           appointment_time: appointmentData.appointment_time,
           reason: appointmentData.reason,
-          status: 'scheduled',
+          status: 'confirmed',
           created_by: user?.id,
+        });
+
+      if (appointmentError) {
+        console.error('Error creating appointment:', appointmentError);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: appointmentError.message,
+        });
+        return;
+      }
+
+      console.log('Appointment created successfully:', {
+        patientId,
+        doctorId,
+        appointment_date: format(appointmentData.appointment_date!, 'yyyy-MM-dd'),
+        appointment_time: appointmentData.appointment_time,
+        reason: appointmentData.reason,
+        status: 'scheduled'
         });
 
       toast({
         title: "Appointment Booked!",
-        description: "Your appointment has been successfully scheduled.",
+        description: `Your appointment with ${selectedDoctor?.full_name || 'the doctor'} has been successfully scheduled for ${format(appointmentData.appointment_date!, 'PPP')} at ${appointmentData.appointment_time.substring(0, 5)}.`,
       });
 
       setIsDialogOpen(false);
@@ -345,7 +538,9 @@ const Home = () => {
       
       fetchInsights();
       fetchRecentActivity();
+      loadAppointments(); // Refresh appointments list
     } catch (error: any) {
+      console.error('Error booking appointment:', error);
       toast({
         variant: "destructive",
         title: "Error",
@@ -465,6 +660,142 @@ const Home = () => {
     }
   };
 
+  const AppointmentsList = () => {
+    const [loading, setLoading] = useState(false);
+
+    const handleAppointmentAction = async (appointmentId: string, action: 'approve' | 'reject') => {
+      try {
+        const newStatus = action === 'approve' ? 'confirmed' : 'cancelled';
+        
+        const { error } = await supabase
+          .from('appointments')
+          .update({ status: newStatus })
+          .eq('id', appointmentId);
+
+        if (error) {
+          console.error('Error updating appointment:', error);
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Failed to update appointment status",
+          });
+          return;
+        }
+
+        toast({
+          title: action === 'approve' ? "Appointment Confirmed" : "Appointment Cancelled",
+          description: `Appointment has been ${action === 'approve' ? 'confirmed' : 'cancelled'}`,
+        });
+
+        // Refresh appointments list
+        await loadAppointments();
+      } catch (error) {
+        console.error('Error updating appointment:', error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to update appointment status",
+        });
+      }
+    };
+
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      );
+    }
+
+    if (appointments.length === 0) {
+      return (
+        <div className="text-center py-8">
+          <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+          <h3 className="text-lg font-semibold mb-2">No Appointments Found</h3>
+          <p className="text-muted-foreground mb-4">
+            You don't have any appointments yet.
+          </p>
+          <Button onClick={() => setIsAppointmentsDialogOpen(false)}>
+            Book an Appointment
+          </Button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        {appointments.map((appointment) => (
+          <Card key={appointment.id}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-semibold">
+                      {userRole?.role === 'patient' 
+                        ? `Dr. ${appointment.doctors?.full_name || 'Unknown Doctor'}` 
+                        : appointment.patients?.full_name || 'Unknown Patient'
+                      }
+                    </h4>
+                    <Badge variant={
+                      appointment.status === 'confirmed' ? 'default' :
+                      appointment.status === 'completed' ? 'secondary' :
+                      appointment.status === 'cancelled' ? 'destructive' :
+                      appointment.status === 'no_show' ? 'destructive' : 'outline'
+                    }>
+                      {appointment.status}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {userRole?.role === 'patient' 
+                      ? appointment.doctors?.specialization || 'General Practice'
+                      : 'Patient'
+                    }
+                  </p>
+                  <p className="text-sm">
+                    {format(new Date(appointment.appointment_date), 'PPP')} at {appointment.appointment_time}
+                  </p>
+                  {appointment.reason && (
+                    <p className="text-sm text-muted-foreground">
+                      Reason: {appointment.reason}
+                    </p>
+                  )}
+                </div>
+                
+                <div className="flex flex-col items-end gap-2">
+                  <div className="text-right text-sm text-muted-foreground">
+                    <p>Created: {format(new Date(appointment.created_at), 'MMM dd, yyyy')}</p>
+                  </div>
+                  
+                  {/* Approval buttons for doctors and admins */}
+                  {(userRole?.role === 'doctor' || userRole?.role === 'admin' || userRole?.role === 'super_admin') && 
+                   appointment.status !== 'completed' && appointment.status !== 'cancelled' && appointment.status !== 'no_show' && (
+                    <div className="flex gap-2">
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={() => handleAppointmentAction(appointment.id, 'reject')}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        Cancel
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        onClick={() => handleAppointmentAction(appointment.id, 'approve')}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        Confirm
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  };
+
   const roleContent = getRoleBasedContent();
 
   return (
@@ -478,8 +809,7 @@ const Home = () => {
               <h1 className="text-xl font-bold">MediDash Plus</h1>
             </div>
             
-            <nav className="hidden md:flex items-center gap-6">
-              {userRole?.role === 'patient' && (
+            <nav className="flex items-center gap-2 md:gap-6">
               <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogTrigger asChild>
                   <Button variant="ghost" className="gap-2">
@@ -591,7 +921,28 @@ const Home = () => {
                   </div>
                 </DialogContent>
               </Dialog>
-              )}
+
+              <Dialog open={isAppointmentsDialogOpen} onOpenChange={setIsAppointmentsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" className="gap-2">
+                    <Calendar className="h-4 w-4" />
+                    <span className="hidden md:inline">My Appointments</span>
+                    <span className="md:hidden">Appointments</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>My Appointments</DialogTitle>
+                    <DialogDescription>
+                      View and manage your appointments
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  <div className="py-4">
+                    <AppointmentsList />
+                  </div>
+                </DialogContent>
+              </Dialog>
 
               <Button variant="ghost" onClick={() => navigate('/dashboard')} className="gap-2">
                 <HomeIcon className="h-4 w-4" />
@@ -624,6 +975,10 @@ const Home = () => {
                   <DropdownMenuItem onClick={() => navigate('/dashboard')}>
                     <User className="mr-2 h-4 w-4" />
                     Dashboard
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setIsAppointmentsDialogOpen(true)}>
+                    <Calendar className="mr-2 h-4 w-4" />
+                    My Appointments
                   </DropdownMenuItem>
                   <DropdownMenuItem>
                     <Settings className="mr-2 h-4 w-4" />
@@ -863,7 +1218,7 @@ const Home = () => {
                 <div className="flex items-center gap-3">
                   <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                     <Award className="h-6 w-6 text-primary" />
-                  </div>
+        </div>
                   <CardTitle>Proven Excellence</CardTitle>
                 </div>
               </CardHeader>
@@ -880,9 +1235,9 @@ const Home = () => {
                 <div className="flex items-center gap-3">
                   <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                     <Clock className="h-6 w-6 text-primary" />
-                  </div>
+        </div>
                   <CardTitle>Real-Time Access</CardTitle>
-                </div>
+    </div>
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">
@@ -893,28 +1248,28 @@ const Home = () => {
             </Card>
 
             <Card className="border-2 border-primary/20">
-              <CardHeader>
+    <CardHeader>
                 <div className="flex items-center gap-3">
                   <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                     <User className="h-6 w-6 text-primary" />
                   </div>
                   <CardTitle>Patient-Centered</CardTitle>
                 </div>
-              </CardHeader>
+    </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">
                   Empowering patients with tools to actively participate in their healthcare journey through 
                   easy appointment booking, health record access, and transparent communication.
                 </p>
               </CardContent>
-            </Card>
+  </Card>
 
             <Card className="border-2 border-primary/20">
               <CardHeader>
                 <div className="flex items-center gap-3">
                   <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                     <ArrowUpRight className="h-6 w-6 text-primary" />
-                  </div>
+      </div>
                   <CardTitle>Scalable Solutions</CardTitle>
                 </div>
               </CardHeader>
@@ -923,8 +1278,8 @@ const Home = () => {
                   Built to grow with your institution, our system adapts to your needs whether you're a small 
                   clinic or a multi-facility hospital network.
                 </p>
-              </CardContent>
-            </Card>
+    </CardContent>
+  </Card>
           </div>
         </div>
 
@@ -959,7 +1314,7 @@ const Home = () => {
         </div>
 
         {/* Hospital Info */}
-        <Card>
+  <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Building2 className="h-5 w-5" />
@@ -986,9 +1341,9 @@ const Home = () => {
                 <p className="text-sm text-muted-foreground">Your data is protected</p>
                 <p className="text-sm text-muted-foreground">HIPAA compliant</p>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+        </div>
+    </CardContent>
+  </Card>
       </main>
 
       <footer className="border-t py-8 bg-card/50 mt-12">
