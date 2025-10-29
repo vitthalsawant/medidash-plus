@@ -364,7 +364,7 @@ const Home = () => {
         setDoctors(getFallbackDoctors());
         
         // Show helpful message to user
-        toast({
+      toast({
           title: "Demo Mode",
           description: "Database error. Using demo doctors. Run 'setup-database.bat' to fix database.",
           duration: 5000,

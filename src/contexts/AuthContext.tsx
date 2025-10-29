@@ -125,8 +125,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // If user has no role assigned, still allow login but without role
       // The user will be redirected to home page without access to role-specific dashboards
       
-      // Role matches, proceed to navigation
-      navigate('/home');
+      // Role matches, proceed to navigation based on role
+      if (role === 'admin' || role === 'super_admin') {
+        navigate('/admin');
+      } else {
+        navigate('/home');
+      }
     }
     
     return { error };
