@@ -18,8 +18,6 @@ export type Database = {
         Row: {
           appointment_date: string
           appointment_time: string
-          approved_at: string | null
-          approved_by: string | null
           created_at: string
           created_by: string | null
           doctor_id: string
@@ -27,14 +25,12 @@ export type Database = {
           notes: string | null
           patient_id: string
           reason: string | null
-          status: Database["public"]["Enums"]["appointment_status"]
+          status: string
           updated_at: string
         }
         Insert: {
           appointment_date: string
           appointment_time: string
-          approved_at?: string | null
-          approved_by?: string | null
           created_at?: string
           created_by?: string | null
           doctor_id: string
@@ -42,14 +38,12 @@ export type Database = {
           notes?: string | null
           patient_id: string
           reason?: string | null
-          status?: Database["public"]["Enums"]["appointment_status"]
+          status?: string
           updated_at?: string
         }
         Update: {
           appointment_date?: string
           appointment_time?: string
-          approved_at?: string | null
-          approved_by?: string | null
           created_at?: string
           created_by?: string | null
           doctor_id?: string
@@ -57,7 +51,7 @@ export type Database = {
           notes?: string | null
           patient_id?: string
           reason?: string | null
-          status?: Database["public"]["Enums"]["appointment_status"]
+          status?: string
           updated_at?: string
         }
         Relationships: [
@@ -439,13 +433,6 @@ export type Database = {
         | "patient"
         | "nurse"
         | "receptionist"
-      appointment_status:
-        | "pending"
-        | "approved"
-        | "confirmed"
-        | "completed"
-        | "cancelled"
-        | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -580,14 +567,6 @@ export const Constants = {
         "patient",
         "nurse",
         "receptionist",
-      ],
-      appointment_status: [
-        "pending",
-        "approved",
-        "confirmed",
-        "completed",
-        "cancelled",
-        "rejected",
       ],
     },
   },

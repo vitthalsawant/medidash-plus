@@ -115,15 +115,15 @@ const PatientDashboard = () => {
       // Create appointment
       const { error: appointmentError } = await supabase
         .from('appointments')
-        .insert([{
+        .insert({
           patient_id: patientId,
           doctor_id: appointmentData.doctor_id,
           appointment_date: format(appointmentData.appointment_date!, 'yyyy-MM-dd'),
           appointment_time: appointmentData.appointment_time,
           reason: appointmentData.reason,
-          status: 'pending',
+          status: 'scheduled',
           created_by: user?.id,
-        }]);
+        });
 
       if (appointmentError) throw appointmentError;
 
