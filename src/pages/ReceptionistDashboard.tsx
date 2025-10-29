@@ -104,15 +104,15 @@ const ReceptionistDashboard = () => {
     try {
       const { error } = await supabase
         .from('appointments')
-        .insert({
+        .insert([{
           patient_id: appointmentData.patient_id,
           doctor_id: appointmentData.doctor_id,
           appointment_date: format(appointmentData.appointment_date!, 'yyyy-MM-dd'),
           appointment_time: appointmentData.appointment_time,
           reason: appointmentData.reason,
-          status: 'scheduled',
+          status: 'pending',
           created_by: user?.id,
-        });
+        }]);
 
       if (error) throw error;
 
