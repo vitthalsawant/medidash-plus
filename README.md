@@ -1,73 +1,145 @@
-# Welcome to your Lovable project
+## MediDash Plus – Hospital Management System (HMS)
 
-## Project info
+Live Demo: [medidash-plus.vercel.app/home](https://medidash-plus.vercel.app/home)
 
-**URL**: https://lovable.dev/projects/e686a572-1569-4c80-b10b-f9cada5fb639
+MediDash Plus is a role‑based Hospital Management System built primarily as a frontend app with Supabase as the backend‑as‑a‑service. It implements authentication, authorization by role, and key workflows such as appointment booking and prescription creation.
 
-## How can I edit this code?
+### Assignment Mapping (Requirements vs Implemented)
 
-There are several ways of editing your application.
+- **Stack requirement (MERN: MongoDB, Express.js, React, Node.js)**
+  - Followed: React + Vite + TypeScript on the frontend.
+  - Not followed: No Express/Node server or MongoDB. Used Supabase (Postgres + auth + storage) instead of a custom MERN backend.
 
-**Use Lovable**
+- **Authentication & Authorization (Super Admin, Admin, Doctor, Patient, Nurse, Receptionist)**
+  - Followed: Email/password auth via Supabase; role stored in `user_roles` table; guarded routes and role‑based dashboards with `ProtectedRoute` and `AuthContext`.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/e686a572-1569-4c80-b10b-f9cada5fb639) and start prompting.
+- **State management (Redux/Zustand/Context API)**
+  - Followed: React Context API (`src/contexts/AuthContext.tsx`) for auth/session/role state.
 
-Changes made via Lovable will be committed automatically to this repo.
+- **Global search, pagination, form validation**
+  - Partially followed: Several forms use validation with `zod`. Global search and pagination are not implemented across lists; only small in‑dialog filtering is present (e.g., receptionist patient search).
 
-**Use your preferred IDE**
+- **Role‑specific dashboards and access**
+  - Followed: Dedicated dashboards for all roles with protected routing.
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+- **CRUD operations (users, patients, doctors, appointments, etc.)**
+  - Partially followed: Implemented creation flows for appointments (Patient and Receptionist) and prescriptions (Doctor). Many list/detail/update/delete views are scaffolded in UI but not wired to data yet.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- **Document management**
+  - Not fully followed: UI stubs exist for documents, but upload/verify/download flows are not completed. No file storage integration yet.
 
-Follow these steps:
+- **Scalability & maintainability**
+  - Followed at a basic level: Modular pages/components, role‑based routing, Supabase SQL migrations. No production Node API.
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+- **Bonus: Real‑time notifications**
+  - Not followed: No Socket.io or real‑time channels wired up yet.
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+### What’s Implemented in the Dashboard
 
-# Step 3: Install the necessary dependencies.
-npm i
+- **Authentication**: Sign up/sign in with role awareness; prevents logging in with a mismatched role.
+- **Role‑based routing**: Redirects to appropriate dashboard. Unassigned users are sent to `Home`.
+- **Patient**:
+  - Book appointment with doctor selection, date/time picker, and reason.
+  - Auto‑create a minimal patient profile if missing.
+- **Receptionist**:
+  - Book appointment for existing patients; quick patient search and doctor selection.
+- **Doctor**:
+  - Create prescription with multiple medications; persists `medical_records` and `prescriptions` in Supabase.
+- **Admin / Super Admin / Nurse**:
+  - Rich UI cards and actions are scaffolded; most buttons are placeholders pending backend endpoints and data tables.
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+### Known Limitations / Non‑Working or Partial Areas
+
+- Document uploads, verification, and downloads are not implemented.
+- Most analytics/stats are static placeholders.
+- No global search across entities; no pagination on lists.
+- Limited CRUD: update/delete flows and detailed list pages are pending.
+- No server‑side Node/Express API and no MongoDB; Supabase is used instead.
+- No real‑time notifications.
+
+---
+
+## Tech Stack
+
+- React + Vite + TypeScript
+- Tailwind CSS + shadcn/ui
+- Supabase (Auth + Postgres + SQL migrations)
+- Zod (form validation)
+
+## Local Development
+
+### Prerequisites
+
+- Node.js 18+ and npm
+- Supabase project (recommended) or run Supabase locally
+
+### Environment Variables
+
+Create a `.env` file in the project root with:
+
+```
+VITE_SUPABASE_URL=<your-supabase-url>
+VITE_SUPABASE_PUBLISHABLE_KEY=<your-supabase-anon-key>
+```
+
+### Setup & Run
+
+```
+git clone <your-repo-url>
+cd medidash-plus-1
+npm install
+
+# Start dev server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Open the app at the Vite URL shown in the terminal.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Optional: Run Supabase locally
 
-**Use GitHub Codespaces**
+Windows batch helpers are provided:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```
+# Start Supabase Docker stack (requires Docker Desktop)
+start-supabase.bat
 
-## What technologies are used for this project?
+# Apply database schema/migrations
+setup-database.bat
+```
 
-This project is built with:
+Alternatively, create the required tables in a hosted Supabase project and set the `.env` accordingly. SQL migrations are in `supabase/migrations/`.
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Usage Notes
 
-## How can I deploy this project?
+- You can self‑register as a Patient. Other roles typically need an admin to assign a role in the `user_roles` table.
+- Sign‑in requires selecting the correct role; mismatched role logins are rejected by the app.
 
-Simply open [Lovable](https://lovable.dev/projects/e686a572-1569-4c80-b10b-f9cada5fb639) and click on Share -> Publish.
+## Deployment
 
-## Can I connect a custom domain to my Lovable project?
+The app is deployed to Vercel:
 
-Yes, you can!
+- Live: [MediDash Plus (Vercel)](https://medidash-plus.vercel.app/home)
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+To deploy your fork, connect the repository to Vercel and configure the two environment variables (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`).
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## Directory Highlights
+
+- `src/contexts/AuthContext.tsx`: Auth/session/role management and navigation logic.
+- `src/components/ProtectedRoute.tsx`: Role‑gated routing.
+- `src/pages/*Dashboard.tsx`: Role dashboards and flows.
+- `src/integrations/supabase/`: Supabase client and types.
+- `supabase/migrations/`: SQL migrations used by the app.
+
+## Roadmap (Next Steps)
+
+- Implement document storage (upload/verify/download) via Supabase Storage.
+- Add list pages with server‑side pagination and global search.
+- Complete CRUD for users, doctors, patients, appointments.
+- Add real‑time notifications (e.g., appointments and prescription updates).
+- Replace placeholder stats with live analytics.
+
+---
+
+If you have trouble running the project or need test data/roles created in your Supabase instance, open an issue or contact the maintainer.
+
+
