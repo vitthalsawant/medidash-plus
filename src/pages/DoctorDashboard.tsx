@@ -138,14 +138,14 @@ const DoctorDashboard = () => {
       // Create prescription
       const { error: prescriptionError } = await supabase
         .from('prescriptions')
-        .insert({
+        .insert([{
           patient_id: prescriptionData.patient_id,
           doctor_id: doctorData.id,
           medical_record_id: recordData.id,
-          medications: medications,
+          medications: medications as any,
           instructions: prescriptionData.instructions,
           valid_until: format(new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd')
-        });
+        }]);
 
       if (prescriptionError) throw prescriptionError;
 
